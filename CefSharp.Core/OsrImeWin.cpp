@@ -127,7 +127,7 @@ namespace CefSharp
                 host->ImeSetComposition(cTextStr,
                                         underlines,
                                         CefRange(UINT32_MAX, UINT32_MAX),
-                                        CefRange(composition_start, static_cast<int>(composition_start + cTextStr.length())));
+                                        CefRange(composition_start, 0));
 
                 // Update the Candidate Window position. The cursor is at the end so
                 // subtract 1. This is safe because IMM32 does not support non-zero-width
