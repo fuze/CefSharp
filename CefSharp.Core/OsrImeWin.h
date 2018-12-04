@@ -33,6 +33,5 @@ namespace CefSharp
 		WndProcDelegate^ _wndProcHandler;
 		IBrowser^ _browser;
 		OsrImeHandler* _imeHandler;
-        HHOOK _hKeyboardHook = 0;
     };
 }

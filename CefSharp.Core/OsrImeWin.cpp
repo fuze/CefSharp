@@ -6,55 +6,12 @@
 
 namespace CefSharp
 {
-    static const auto s_propComposition = L"FuzeIME";
-
-    static void EndIMEComposition(HWND hWnd)
-    {
-        if (GetProp(hWnd, s_propComposition))
-        {
-            HIMC hImc = ::ImmGetContext(hWnd);
-
-            ImmNotifyIME(hImc, NI_COMPOSITIONSTR, CPS_COMPLETE, 0);
-            ImmNotifyIME(hImc, NI_CLOSECANDIDATE, 0, 0);
-
-            ImmReleaseContext(hWnd, hImc);
-        }
-    }
-
-    static LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam)
-    {
-        if (HC_ACTION == code)
-        {
-            auto hWndFocus = GetActiveWindow();
-
-            if (GetProp(hWndFocus, s_propComposition))
-            {
-                for (auto key: {VK_LEFT, VK_RIGHT, VK_HOME, VK_END, VK_ESCAPE, VK_DELETE, VK_BACK})
-                {
-                    if (wParam == key)
-                    {
-                        EndIMEComposition(hWndFocus);
-
-                        // After 'EndIMEComposition', key is lost, enter it again.
-                        SendMessage(hWndFocus, WM_KEYUP, key, 1);
-                    }
-                }
-            }
-        }
-
-        return CallNextHookEx(0, code, wParam, lParam);
-    }
-
     OsrImeWin::OsrImeWin(IntPtr ownerHWnd, IBrowser^ browser)
         :_ownerHWnd(ownerHWnd), _browser(browser)
     {
         _wndProcHandler = gcnew WndProcDelegate(this, &OsrImeWin::WndProc);
 
         _imeHandler = new OsrImeHandler(static_cast<HWND>(_ownerHWnd.ToPointer()));
-
-        // When composition is started, some keyboard input like 'VK_LEFT, VK_RIGHT, VK_HOME, VK_END, VK_ESCAPE, VK_DELETE, VK_BACK' don't work correctly.
-        // As a workaround, when one of the above keys are pressed, composition is ended. It is only possible to detect these key via keyboard hook. 
-        _hKeyboardHook = SetWindowsHookEx(WH_KEYBOARD, KeyboardProc, 0, GetCurrentThreadId());
     }
 
     OsrImeWin::~OsrImeWin() 
@@ -65,11 +22,6 @@ namespace CefSharp
         if (_imeHandler) 
         {
             delete _imeHandler;
-        }
-
-        if (_hKeyboardHook)
-        {
-            UnhookWindowsHookEx(_hKeyboardHook);
         }
     }
   
@@ -182,7 +134,16 @@ namespace CefSharp
 
     void OsrImeWin::HideWindow()
     {
-        EndIMEComposition((HWND)_ownerHWnd.ToInt32());
+        auto hWnd = reinterpret_cast<HWND>(_ownerHWnd.ToInt32());
+
+        HIMC hImc = ::ImmGetContext(hWnd);
+        if (hImc)
+        {
+            ImmNotifyIME(hImc, NI_COMPOSITIONSTR, CPS_COMPLETE, 0);
+            ImmNotifyIME(hImc, NI_CLOSECANDIDATE, 0, 0);
+
+            ImmReleaseContext(hWnd, hImc);
+        }
     }
 
     void OsrImeWin::KillFocus()
@@ -205,8 +166,6 @@ namespace CefSharp
             return IntPtr::Zero;
 
         case WM_IME_STARTCOMPOSITION:
-            SetProp((HWND)hWnd.ToInt32(), s_propComposition, (HANDLE)1);
-
             OnIMEStartComposition();
 
             return IntPtr::Zero;
@@ -217,8 +176,6 @@ namespace CefSharp
             return IntPtr::Zero;
 
         case WM_IME_ENDCOMPOSITION:
-            SetProp((HWND)hWnd.ToInt32(), s_propComposition, (HANDLE)0);
-
             OnIMECancelCompositionEvent();
 
             // Let WTL call::DefWindowProc() and release its resources.
