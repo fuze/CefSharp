@@ -49,10 +49,6 @@ namespace CefSharp.Wpf
         /// </summary>
         private Window sourceWindow;
         /// <summary>
-        /// The MonitorInfo based on the current hwnd
-        /// </summary>
-        private MonitorInfoEx monitorInfo;
-        /// <summary>
         /// The tooltip timer
         /// </summary>
         private DispatcherTimer tooltipTimer;
@@ -259,7 +255,7 @@ namespace CefSharp.Wpf
         /// </summary>
         /// <remarks>Whilst this may seem like a logical place to execute js, it's called before the DOM has been loaded, implement
         /// <see cref="IRenderProcessMessageHandler.OnContextCreated" /> as it's called when the underlying V8Context is created
-        /// </remarks>
+        /// (Only called for the main frame at this stage)</remarks>
         public event EventHandler<FrameLoadStartEventArgs> FrameLoadStart;
 
         /// <summary>
@@ -397,6 +393,8 @@ namespace CefSharp.Wpf
         public double DpiScaleFactor { get; set; }
 
         private OsrImeWin _imeWin;
+
+        private bool _wasMaximized = false;
 
         // This is a simple script which get absolute location of focused element. There is a script, which get coordinates of caret, it is quite large, it needs to be in the Resources.
         private string script = "(function() { var el = document.activeElement; var l = 0; var t = 0; do { t += el.offsetTop || 0; l += el.offsetLeft || 0; el = el.offsetParent; } while(el); return l + ',' + t;})()";
@@ -660,12 +658,7 @@ namespace CefSharp.Wpf
         /// <returns>ScreenInfo containing the current DPI scale factor</returns>
         protected virtual ScreenInfo? GetScreenInfo()
         {
-            var screenInfo = new ScreenInfo
-            {
-                DeviceScaleFactor = (float)DpiScaleFactor,
-                Rect = monitorInfo.Monitor, //TODO: Do values need to be scaled?
-                AvailableRect = monitorInfo.WorkArea //TODO: Do values need to be scaled?
-            };            
+            var screenInfo = new ScreenInfo { DeviceScaleFactor = (float)DpiScaleFactor };
 
             return screenInfo;
         }
@@ -1495,10 +1488,44 @@ namespace CefSharp.Wpf
 
             const int WM_EXITSIZEMOVE = 0x0232;
             const int WM_SIZE = 0x0005;
+            const int WM_APP = 0x8000;
+
             const int SIZE_MAXIMIZED = 2;
             const int SIZE_RESTORED = 0;
 
-            if (message == WM_EXITSIZEMOVE || (message == WM_SIZE && (wParam.ToInt32() == SIZE_MAXIMIZED || wParam.ToInt32() == SIZE_RESTORED)))
+            bool moveIMEWindow = false;
+
+            if (message == WM_EXITSIZEMOVE)
+            {
+                moveIMEWindow = true;
+            }
+            else if (message == WM_SIZE)
+            {
+                if (wParam.ToInt32() == SIZE_MAXIMIZED)
+                {
+                    _wasMaximized = true;
+
+                    moveIMEWindow = true;
+                }
+                else if (_wasMaximized)
+                {
+                    _wasMaximized = false;
+
+                    if (wParam.ToInt32() == SIZE_RESTORED)
+                    {
+                        moveIMEWindow = true;
+                    }
+                }
+            }
+
+            if (moveIMEWindow)
+            {
+                if (_imeWin != null)
+                {
+                    _imeWin.PostWM_APP();
+                }
+            }
+            else if (message == WM_APP)
             {
                 MoveIMEWindow();
             }
@@ -1688,9 +1715,6 @@ namespace CefSharp.Wpf
                 }
 
                 browserScreenLocation = GetBrowserScreenLocation();
-
-                monitorInfo.Init();
-                MonitorInfo.GetMonitorInfoForWindowHandle(source.Handle, ref monitorInfo);
             }
             else if (args.OldSource != null)
             {
@@ -2069,7 +2093,10 @@ namespace CefSharp.Wpf
             }
         }
 
-        protected void MoveIMEWindow()
+
+        /// <summary>
+        /// Caculate position of IME window via JavaScript.
+        protected void MoveIMEWindow(bool adjustPosition = false)
         {
             if (_imeWin != null && browser != null)
             {
@@ -2096,6 +2123,11 @@ namespace CefSharp.Wpf
                         if (_imeWin != null)
                         {
                             _imeWin.MoveWindow(x, y);
+
+                            if (adjustPosition)
+                            {
+//                                _imeWin.AdjustWindowPosition();
+                            }
                         }
                     }
                 }, TaskScheduler.FromCurrentSynchronizationContext());
@@ -2112,6 +2144,9 @@ namespace CefSharp.Wpf
             if (_imeWin == null && browser != null && source != null)
             {
                 _imeWin = new OsrImeWin(source.Handle, browser);
+
+                // Somehow after page is loaded and when switching to IME via TaskBar icon and typing, IME window doesn't appear. As a workaround call 'KillSetFocusAsync'.
+                KillSetFocusAsync();
 
                 MoveIMEWindow();
             }
@@ -2225,6 +2260,28 @@ namespace CefSharp.Wpf
             }
         }
 
+
+        /// <summary>
+        /// Function is used to hide IME window indirectly by KillFocus and SetFocus(source.Handle) (asynchronously via JavaScript).
+        /// It is used as workarounds in 'OnGotFocus' and in 'OnMouseDown'.
+        protected void KillSetFocusAsync()
+        {
+            if (browser != null)
+            {
+                OsrImeWin.KillFocus();
+
+                var browserWrapper = browser as CefSharpBrowserWrapper;
+                var frame = browserWrapper.MainFrame;
+
+                var task = frame.EvaluateScriptAsync("", null);
+                task.ContinueWith(t =>
+                {
+                    OsrImeWin.SetFocus(source.Handle);
+
+                }, TaskScheduler.FromCurrentSynchronizationContext());
+            }
+        }
+
         /// <summary>
         /// Invoked when an unhandled <see cref="E:System.Windows.Input.Mouse.MouseDown" /> attached event reaches an
         /// element in its route that is derived from this class. Implement this method to add class handling for this event.
@@ -2238,26 +2295,10 @@ namespace CefSharp.Wpf
 
             base.OnMouseDown(e);
 
+            // When user clicks on a textbox which has focus, IME window hides, but somehow last entered characters are duplicated, KillSetFocusAsync is used workaround.
+            KillSetFocusAsync();
 
-            // Cannot use _imeWin.HideWindow(), since when clicking on a text, cursor appears at the end of the text.
-            // As a workaround call '_imeWin.KillFocus()' and '_imeWin.SetFocus()' (asynchronously, described bellow).
-            if (_imeWin != null && browser != null)
-            {
-                _imeWin.KillFocus();
-
-                // When user clicks on a textbox which has focus, IME window hides, but somehow last entered characters are duplicated. As a workaround call 'SetFocus()' asynchrnously via JavaScript. 
-                var browserWrapper = browser as CefSharpBrowserWrapper;
-                var frame = browserWrapper.MainFrame;
-
-                var task = frame.EvaluateScriptAsync("", null);
-                task.ContinueWith(t =>
-                {
-                    if (_imeWin != null)
-                    {
-                        _imeWin.SetFocus();
-                    }
-                }, TaskScheduler.FromCurrentSynchronizationContext());
-            }
+            MoveIMEWindow();
         }
 
         /// <summary>

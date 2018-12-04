@@ -64,9 +64,10 @@ namespace CefSharp
 		// in view device coordinates.
 		void ChangeCompositionRange(const CefRange& selection_range, const std::vector<CefRect>& character_bounds);
 
-		// Updates the position of the IME windows.
+		// Updates the position of the IME window.
 		void MoveImeWindow();
 
+        // Updates the position of the IME window.
         void MoveImeWindow(int x, int y);
 
 	private:

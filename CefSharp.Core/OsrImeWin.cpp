@@ -2,6 +2,7 @@
 #include "OsrImeWin.h"
 #include "Internals\CefBrowserHostWrapper.h"
 #include "Internals\CefFrameWrapper.h"
+#include <msclr/marshal_cppstd.h>
 
 namespace CefSharp
 {
@@ -28,7 +29,7 @@ namespace CefSharp
 
             if (GetProp(hWndFocus, s_propComposition))
             {
-                for (auto key: {VK_LEFT, VK_RIGHT, VK_HOME, VK_END, VK_ESCAPE, VK_DELETE})
+                for (auto key: {VK_LEFT, VK_RIGHT, VK_HOME, VK_END, VK_ESCAPE, VK_DELETE, VK_BACK})
                 {
                     if (wParam == key)
                     {
@@ -51,7 +52,7 @@ namespace CefSharp
 
         _imeHandler = new OsrImeHandler(static_cast<HWND>(_ownerHWnd.ToPointer()));
 
-        // When composition is started, some keyboard input like 'VK_LEFT, VK_RIGHT, VK_HOME, VK_END, VK_ESCAPE, VK_DELETE' don't work correctly.
+        // When composition is started, some keyboard input like 'VK_LEFT, VK_RIGHT, VK_HOME, VK_END, VK_ESCAPE, VK_DELETE, VK_BACK' don't work correctly.
         // As a workaround, when one of the above keys are pressed, composition is ended. It is only possible to detect these key via keyboard hook. 
         _hKeyboardHook = SetWindowsHookEx(WH_KEYBOARD, KeyboardProc, 0, GetCurrentThreadId());
     }
@@ -166,6 +167,11 @@ namespace CefSharp
         }
     }
 
+    void OsrImeWin::PostWM_APP()
+    {
+        ::PostMessage(reinterpret_cast<HWND>(_ownerHWnd.ToInt32()), WM_APP, 0, 0);
+    }
+
     void OsrImeWin::MoveWindow(int x, int y)
     {
         if (_imeHandler)
@@ -184,9 +190,9 @@ namespace CefSharp
         ::SetFocus(0);
     }
 
-    void OsrImeWin::SetFocus()
+    void OsrImeWin::SetFocus(IntPtr hWnd)
     {
-        ::SetFocus((HWND)_ownerHWnd.ToInt32());
+        ::SetFocus((HWND)hWnd.ToInt32());
     }
 
     IntPtr OsrImeWin::WndProc(IntPtr hWnd, int message, IntPtr wParam, IntPtr lParam)

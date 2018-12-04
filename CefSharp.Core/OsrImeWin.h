@@ -18,9 +18,9 @@ namespace CefSharp
 		void OnImeCompositionRangeChanged(CefSharp::Structs::Range selectedRange, array<CefSharp::Structs::Rect>^ characterBounds);
         void MoveWindow(int x, int y);
         void HideWindow();
-        void KillFocus();
-        void SetFocus();
-
+        void PostWM_APP();
+        static void KillFocus();
+        static void SetFocus(IntPtr hWnd);
       protected:
 		void OnIMESetContext(UINT message, WPARAM wParam, LPARAM lParam);
 		void OnIMEStartComposition();

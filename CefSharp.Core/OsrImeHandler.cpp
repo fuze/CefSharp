@@ -157,9 +157,6 @@ namespace CefSharp
         HWND window_handle = hwnd_;
         HIMC imm_context = ::ImmGetContext(hwnd_);
 
-        RECT rectWnd;
-        GetWindowRect(hwnd_, &rectWnd);
-
         int x = caretX_;
         int y = caretY_ + 100; // !!! Should be fixed. Hadcoded just for WPF.Example.
 
@@ -218,7 +215,6 @@ namespace CefSharp
 
         MoveImeWindow();
     }
-
 
     void OsrImeHandler::CleanupComposition()
     {
