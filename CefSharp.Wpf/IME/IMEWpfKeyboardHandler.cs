@@ -67,13 +67,6 @@ namespace CefSharp.Wpf.IME
             owner.GotFocus += Owner_GotFocus;
             owner.LostFocus += Owner_LostFocus;
 
-/*
-            _defaultContext = NativeIME.ImmGetContext(_source.Handle);
-            _browserContext = NativeIME.ImmCreateContext();
-
-            NativeIME.ImmAssociateContext(_source.Handle, _browserContext);
-*/
-
             // TODO: need to find a better way to trigger setting context on the window
             owner.Focus();
         }
@@ -87,14 +80,6 @@ namespace CefSharp.Wpf.IME
 
             owner.GotFocus -= Owner_GotFocus;
             owner.LostFocus -= Owner_LostFocus;
-
-/*
-            if (_source != null)
-            {
-                NativeIME.ImmAssociateContext(_source.Handle, _defaultContext);
-            }
-            NativeIME.ImmDestroyContext(_browserContext);
-*/
 
             if (_source != null && sourceHook != null)
             {
@@ -113,15 +98,6 @@ namespace CefSharp.Wpf.IME
             Console.WriteLine(msg);
             switch (msg)
             {
-                case NativeIME.WM_SIZE:
-                    if (wParam.ToInt32() == NativeIME.SIZE_RESTORED || wParam.ToInt32() == NativeIME.SIZE_MAXIMIZED)
-                    {
-                        Console.WriteLine("!!!!!!!!!!!!!!!!!!");
-                        NativeIME.SetFocus(IntPtr.Zero);
-                        NativeIME.SetFocus(hwnd);
-                    }
-                    break;
-
                 case NativeIME.WM_IME_SETCONTEXT:
                     OnIMESetContext(hwnd, (uint) msg, wParam, lParam);
                     handled = true;

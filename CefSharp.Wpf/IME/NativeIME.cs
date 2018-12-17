@@ -25,11 +25,6 @@ namespace CefSharp.Wpf.IME
         public const int WM_IME_KEYDOWN = 0x290;
         public const int WM_IME_KEYUP = 0x291;
         public const int WM_SYSCHAR = 0x0106;
-        public const int WM_APP = 0x8000;
-        public const int WM_SIZE = 0x0005;
-
-        internal const uint SIZE_RESTORED = 0;
-        internal const uint SIZE_MAXIMIZED = 2;
 
 
         internal const uint GCS_RESULTSTR = 0x0800;

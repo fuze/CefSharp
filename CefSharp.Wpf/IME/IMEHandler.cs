@@ -11,7 +11,6 @@ namespace CefSharp.Wpf.IME
         internal const uint ColorUNDERLINE = 0xFFFFFFFF;   // Black SkColor value for underline,
         internal const uint ColorBKCOLOR = 0xFF000000;    // White SkColor value for background,
 
-//        internal IntPtr _hIMC;
         IntPtr _hWnd;
 
         internal static IMEHandler Create(IntPtr hWnd)
@@ -22,12 +21,10 @@ namespace CefSharp.Wpf.IME
         private IMEHandler(IntPtr hWnd)
         {
             _hWnd = hWnd;
-//            _hIMC = ImmGetContext(_hWnd);
         }
 
         public void Dispose()
         {
-//            ImmReleaseContext(_hWnd, _hIMC);
         }
 
         private bool GetString(IntPtr hIMC, uint lParam, uint type, out string text)
@@ -75,7 +72,6 @@ namespace CefSharp.Wpf.IME
             return ret;
         }
 
-///*		
         private void GetCompositionInfo(uint lParam, string text, List<CompositionUnderline> underlines, ref int compositionStart)
         {
             IntPtr hIMC = ImmGetContext(_hWnd);
@@ -137,65 +133,6 @@ namespace CefSharp.Wpf.IME
 
             ImmReleaseContext(_hWnd, hIMC);
         }
-        //*/		
-        /*
-                private void GetCompositionInfo(uint lParam, string text, List<CompositionUnderline> underlines, ref int compositionStart)
-                {
-                    underlines.Clear();
-
-                    int targetStart = text.Length;
-                    int targetEnd = text.Length;
-                    if (IsParam(lParam, GCS_COMPATTR))
-                    {
-                        GetCompositionSelectionRange(ref targetStart, ref targetEnd);
-                    }
-
-                    // Retrieve the selection range information. If CS_NOMOVECARET is specified
-                    // it means the cursor should not be moved and we therefore place the caret at
-                    // the beginning of the composition string. Otherwise we should honour the
-                    // GCS_CURSORPOS value if it's available.
-                    if (!IsParam(lParam, CS_NOMOVECARET) && IsParam(lParam, GCS_CURSORPOS))
-                    {
-                        // IMM32 does not support non-zero-width selection in a composition. So
-                        // always use the caret position as selection range.
-                        int cursor = (int)ImmGetCompositionString(_hIMC, GCS_CURSORPOS, null, 0);
-                        compositionStart = cursor;
-                    }
-                    else
-                    {
-                        compositionStart = 0;
-                    }
-
-                    if (IsParam(lParam, GCS_COMPCLAUSE))
-                    {
-                        GetCompositionUnderlines(targetStart, targetEnd, underlines);
-                    }
-
-                    if (underlines.Count == 0)
-                    {
-                        Range range = new Range();
-                        bool thick = false;
-                        if (targetStart > 0)
-                        {
-                            range = new Range(0, targetStart);
-                            underlines.Add(new CompositionUnderline(range, ColorUNDERLINE, ColorBKCOLOR, thick));
-                        }
-
-                        if (targetEnd > targetStart)
-                        {
-                            range = new Range(targetStart, targetEnd);
-                            thick = true;
-                            underlines.Add(new CompositionUnderline(range, ColorUNDERLINE, ColorBKCOLOR, thick));
-                        }
-
-                        if (targetEnd < text.Length)
-                        {
-                            range = new Range(targetEnd, text.Length);
-                            underlines.Add(new CompositionUnderline(range, ColorUNDERLINE, ColorBKCOLOR, thick));
-                        }
-                    }
-                }
-        */
 
         private void GetCompositionUnderlines(IntPtr hIMC, int targetStart, int targetEnd, List<CompositionUnderline> underlines)
         {
@@ -226,29 +163,29 @@ namespace CefSharp.Wpf.IME
         {
             var attributeSize = ImmGetCompositionString(hIMC, GCS_COMPATTR, null, 0);
 			if (attributeSize <= 0)
-				return;
-			
-			int start = 0;
-			int end = 0;
+                return;
 
-			// Buffer contains 8bit array
-			var attributeData = new byte[attributeSize];
-			ImmGetCompositionString(hIMC, GCS_COMPATTR, attributeData, attributeSize);
+            int start = 0;
+            int end = 0;
 
-			for (start = 0; start < attributeSize; ++start)
-			{
-				if (IsSelectionAttribute(attributeData[start]))
-					break;
-			}
+            // Buffer contains 8bit array
+            var attributeData = new byte[attributeSize];
+            ImmGetCompositionString(hIMC, GCS_COMPATTR, attributeData, attributeSize);
 
-			for (end = start; end < attributeSize; ++end)
-			{
-				if (!IsSelectionAttribute(attributeData[end]))
-					break;
-			}
+            for (start = 0; start < attributeSize; ++start)
+            {
+                if (IsSelectionAttribute(attributeData[start]))
+                    break;
+            }
 
-			targetStart = start;
-			targetEnd = end;
+            for (end = start; end < attributeSize; ++end)
+            {
+                if (!IsSelectionAttribute(attributeData[end]))
+                    break;
+            }
+
+            targetStart = start;
+            targetEnd = end;
         }
 
         private bool IsSelectionAttribute(byte attribute)
