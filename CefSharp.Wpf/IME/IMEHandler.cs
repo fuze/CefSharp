@@ -137,26 +137,26 @@ namespace CefSharp.Wpf.IME
         private void GetCompositionUnderlines(IntPtr hIMC, int targetStart, int targetEnd, List<CompositionUnderline> underlines)
         {
             var clauseSize = ImmGetCompositionString(hIMC, GCS_COMPCLAUSE, null, 0);
-			if (clauseSize <= 0)
-				return;
-			
+            if (clauseSize <= 0)
+                return;
+
             int clauseLength = (int)clauseSize / sizeof(Int32);
-			
-			// buffer contains 32 bytes (4 bytes) array
-			var clauseData = new byte[(int)clauseSize];
-			ImmGetCompositionString(hIMC, GCS_COMPCLAUSE, clauseData, clauseSize);
 
-			var clauseLength_1 = clauseLength - 1;
-			for (int i = 0; i < clauseLength_1; i++)
-			{
-				int from = BitConverter.ToInt32(clauseData, i * sizeof(Int32));
-				int to = BitConverter.ToInt32(clauseData, (i + 1) * sizeof(Int32));
+            // buffer contains 32 bytes (4 bytes) array
+            var clauseData = new byte[(int)clauseSize];
+            ImmGetCompositionString(hIMC, GCS_COMPCLAUSE, clauseData, clauseSize);
 
-				var range = new Range(from, to);
-				bool thick = (range.From >= targetStart && range.To <= targetEnd);
+            var clauseLength_1 = clauseLength - 1;
+            for (int i = 0; i < clauseLength_1; i++)
+            {
+                int from = BitConverter.ToInt32(clauseData, i * sizeof(Int32));
+                int to = BitConverter.ToInt32(clauseData, (i + 1) * sizeof(Int32));
+
+                var range = new Range(from, to);
+                bool thick = (range.From >= targetStart && range.To <= targetEnd);
 
                 underlines.Add(new CompositionUnderline(range, ColorUNDERLINE, ColorBKCOLOR, thick));
-			}
+            }
         }
 
         private void GetCompositionSelectionRange(IntPtr hIMC, ref int targetStart, ref int targetEnd)
