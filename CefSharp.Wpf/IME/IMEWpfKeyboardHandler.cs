@@ -11,17 +11,11 @@ namespace CefSharp.Wpf.IME
 {
     public class IMEWpfKeyboardHandler : WpfKeyboardHandler
     {
-        static bool _subclassed;
         int _languageCodeId;
         bool _systemCaret;
         bool _isDisposed = false;
-        int _cursorIndex;
-        Range _compositionRange;
-        Rect _imeRect = new Rect(-1, -1, 0, 0);
         List<Rect> _compositionBounds = new List<Rect>();
         HwndSource _source;
-        IntPtr _defaultContext;
-        IntPtr _browserContext;
         Func<IntPtr, int> _loWord;
 
         internal bool IsActive { get; set; }
@@ -55,14 +49,9 @@ namespace CefSharp.Wpf.IME
 
         public override void Setup(HwndSource source)
         {
-            if (!_subclassed)
-            {
-                _source = source;
-                sourceHook = SourceHook;
-                source.AddHook(SourceHook);
-            }
-
-            _subclassed = true;
+            _source = source;
+            sourceHook = SourceHook;
+            source.AddHook(SourceHook);
 
             owner.GotFocus += Owner_GotFocus;
             owner.LostFocus += Owner_LostFocus;
@@ -90,12 +79,11 @@ namespace CefSharp.Wpf.IME
 
         private IntPtr SourceHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
+            handled = false;
+
             if (owner == null || owner.GetBrowserHost() == null || owner.IsDisposed || !IsActive || _isDisposed)
                 return IntPtr.Zero;
 
-            handled = false;
-
-            Console.WriteLine(msg);
             switch (msg)
             {
                 case NativeIME.WM_IME_SETCONTEXT:
@@ -188,7 +176,6 @@ namespace CefSharp.Wpf.IME
 
         private void ResetComposition()
         {
-            _cursorIndex = -1;
         }
 
         private void CreateImeWindow(IntPtr hwnd)
@@ -222,30 +209,12 @@ namespace CefSharp.Wpf.IME
 
         private void MoveImeWindow(IntPtr hwnd)
         {
+            if (0 == _compositionBounds.Count)
+                return;
+
             IntPtr hIMC = NativeIME.ImmGetContext(hwnd);
 
-            Rect rc = _imeRect;
-            int location = _cursorIndex;
-
-            // If location is not specified fall back to the composition range start.
-            if (location == -1)
-            {
-                location = _compositionRange.From;
-            }
-
-            // Offset location by the composition range start if required.
-            if (location >= _compositionRange.From)
-            {
-                location -= _compositionRange.From;
-            }
-
-            if (location >= _compositionBounds.Count)
-            {
-                NativeIME.ImmReleaseContext(hwnd, hIMC);
-                return;
-            }
-
-            rc = _compositionBounds[0];
+            Rect rc = _compositionBounds[0];
 
             NativeIME.RECT rect;
             NativeIME.GetWindowRect(hwnd, out rect);
@@ -312,14 +281,12 @@ namespace CefSharp.Wpf.IME
 
         internal void ChangeCompositionRange(Range selectionRange, List<Rect> bounds)
         {
-            _compositionRange = selectionRange;
             _compositionBounds = bounds;
             MoveImeWindow(_source.Handle);
         }
 
         private void UpdateCaretPosition(int index)
         {
-            _cursorIndex = index;
             MoveImeWindow(_source.Handle);
         }
 
