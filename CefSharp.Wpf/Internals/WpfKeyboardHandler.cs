@@ -5,7 +5,7 @@
 using System.Windows.Input;
 using System.Windows.Interop;
 
-namespace CefSharp.Wpf.Internals 
+namespace CefSharp.Wpf.Internals
 {
     public class WpfKeyboardHandler : IWpfKeyboardHandler
     {
@@ -91,7 +91,7 @@ namespace CefSharp.Wpf.Internals
             }
         }
 
-        public virtual void HandleTextInput(TextCompositionEventArgs e) 
+        public virtual void HandleTextInput(TextCompositionEventArgs e)
         {
             var browser = owner.GetBrowser();
             if (browser != null)
