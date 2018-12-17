@@ -79,6 +79,9 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="CefSettings.cs" />
+    <Compile Include="IME\IMEHandler.cs" />
+    <Compile Include="IME\IMEWpfKeyboardHandler.cs" />
+    <Compile Include="IME\NativeIME.cs" />
     <Compile Include="Internals\MonitorInfo.cs" />
     <Compile Include="Internals\MonitorInfoEx.cs" />
     <Compile Include="Internals\RectStruct.cs" />

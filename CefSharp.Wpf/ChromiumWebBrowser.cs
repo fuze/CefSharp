@@ -12,6 +12,8 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
+using System.Windows.Data;
+using System.Windows.Media;
 using System.Collections.Generic;
 using System.Linq;
 using CefSharp.Enums;
@@ -19,6 +21,7 @@ using CefSharp.Internals;
 using CefSharp.Structs;
 using CefSharp.Wpf.Internals;
 using CefSharp.Wpf.Rendering;
+using CefSharp.Wpf.IME;
 using Microsoft.Win32.SafeHandles;
 using CursorType = CefSharp.Enums.CursorType;
 using Point = System.Windows.Point;
@@ -40,14 +43,14 @@ namespace CefSharp.Wpf
         /// </summary>
         private HwndSource source;
         /// <summary>
-        /// The source hook
-        /// </summary>
-        private HwndSourceHook sourceHook;
-        /// <summary>
         /// The HwndSource RootVisual (Window) - We store a reference
         /// to unsubscribe event handlers
         /// </summary>
         private Window sourceWindow;
+        /// <summary>
+        /// The MonitorInfo based on the current hwnd
+        /// </summary>
+        private MonitorInfoEx monitorInfo;
         /// <summary>
         /// The tooltip timer
         /// </summary>
@@ -255,7 +258,7 @@ namespace CefSharp.Wpf
         /// </summary>
         /// <remarks>Whilst this may seem like a logical place to execute js, it's called before the DOM has been loaded, implement
         /// <see cref="IRenderProcessMessageHandler.OnContextCreated" /> as it's called when the underlying V8Context is created
-        /// (Only called for the main frame at this stage)</remarks>
+        /// </remarks>
         public event EventHandler<FrameLoadStartEventArgs> FrameLoadStart;
 
         /// <summary>
@@ -392,13 +395,6 @@ namespace CefSharp.Wpf
         /// </summary>
         public double DpiScaleFactor { get; set; }
 
-        private OsrImeWin _imeWin;
-
-        private bool _wasMaximized = false;
-
-        // This is a simple script which get absolute location of focused element. There is a script, which get coordinates of caret, it is quite large, it needs to be in the Resources.
-        private string script = "(function() { var el = document.activeElement; var l = 0; var t = 0; do { t += el.offsetTop || 0; l += el.offsetLeft || 0; el = el.offsetParent; } while(el); return l + ',' + t;})()";
-
         /// <summary>
         /// Initializes static members of the <see cref="ChromiumWebBrowser"/> class.
         /// </summary>
@@ -504,7 +500,7 @@ namespace CefSharp.Wpf
             BrowserSettings = new BrowserSettings();
             RenderHandler = new InteropBitmapRenderHandler();
 
-            WpfKeyboardHandler = new WpfKeyboardHandler(this);
+            WpfKeyboardHandler = new IMEWpfKeyboardHandler(this);
 
             PresentationSource.AddSourceChangedHandler(this, PresentationSourceChangedHandler);
 
@@ -620,12 +616,6 @@ namespace CefSharp.Wpf
                     {
                         SetCurrentValue(IsBrowserInitializedProperty, false);
                         WebBrowser = null;
-
-                        if (_imeWin != null)
-                        {
-                            _imeWin.Dispose();
-                            _imeWin = null;
-                        }
                     });
                 }
 
@@ -636,9 +626,8 @@ namespace CefSharp.Wpf
 
                 Cef.RemoveDisposable(this);
 
-                RemoveSourceHook();
-
                 WpfKeyboardHandler.Dispose();
+
                 source = null;
             }
         }
@@ -658,7 +647,12 @@ namespace CefSharp.Wpf
         /// <returns>ScreenInfo containing the current DPI scale factor</returns>
         protected virtual ScreenInfo? GetScreenInfo()
         {
-            var screenInfo = new ScreenInfo { DeviceScaleFactor = (float)DpiScaleFactor };
+            var screenInfo = new ScreenInfo
+            {
+                DeviceScaleFactor = (float)DpiScaleFactor,
+                Rect = monitorInfo.Monitor, //TODO: Do values need to be scaled?
+                AvailableRect = monitorInfo.WorkArea //TODO: Do values need to be scaled?
+            };
 
             return screenInfo;
         }
@@ -869,7 +863,47 @@ namespace CefSharp.Wpf
 
         void IRenderWebBrowser.OnImeCompositionRangeChanged(Range selectedRange, Rect[] characterBounds)
         {
-            OnImeCompositionRangeChanged(selectedRange, characterBounds);
+            Visual GetParentWindow()
+            {
+                var current = VisualTreeHelper.GetParent(this);
+                while (current != null && !(current is Window))
+                {
+                    current = VisualTreeHelper.GetParent(current);
+                }
+
+                return current as Window;
+            }
+
+            var imeKeyboardHandler = WpfKeyboardHandler as IMEWpfKeyboardHandler;
+            if (imeKeyboardHandler.IsActive)
+            {
+                var screenInfo = GetScreenInfo();
+                var scaleFactor = screenInfo.HasValue ? screenInfo.Value.DeviceScaleFactor : 1.0f;
+
+                UiThreadRunSync(() =>
+                {
+                    var parentWindow = GetParentWindow();
+                    Point pnt = parentWindow.PointToScreen(new Point(0, 0));
+
+                    if (parentWindow != null)
+                    {
+                        var point = TransformToAncestor(parentWindow).Transform(new System.Windows.Point(0, 0));
+
+                        var rects = new List<Structs.Rect>();
+
+                        foreach (var item in characterBounds)
+                        {
+                            rects.Add(new Structs.Rect(
+                                (int)((point.X + item.X) * scaleFactor),
+                                (int)((point.Y + item.Y) * scaleFactor),
+                                (int)(item.Width * scaleFactor),
+                                (int)(item.Height * scaleFactor)));
+                        }
+
+                        imeKeyboardHandler.ChangeCompositionRange(selectedRange, rects);
+                    }
+                });
+            }
         }
 
         /// <summary>
@@ -879,22 +913,7 @@ namespace CefSharp.Wpf
         /// <param name="characterBounds">is the bounds of each character in view coordinates.</param>
         protected virtual void OnImeCompositionRangeChanged(Range selectedRange, Rect[] characterBounds)
         {
-            if (_imeWin != null)
-            {
-                UiThreadRunAsync(() =>
-                {
-                    IList<Rect> rects = new List<Rect>();
-                    foreach (var item in characterBounds)
-                    {
-                        if (CleanupElement != null)
-                        {
-                            Point point = this.TransformToAncestor(CleanupElement).Transform(new Point(0, 0));
-                            rects.Add(new Rect((int)(point.X + item.X), (int)(point.Y + item.Y), item.Width, item.Height));
-                        }
-                    }
-                    _imeWin.OnImeCompositionRangeChanged(selectedRange, rects.ToArray());
-                });
-            }
+            //TODO: Implement this
         }
 
         /// <summary>
@@ -1030,11 +1049,6 @@ namespace CefSharp.Wpf
             {
                 if (!IsDisposed)
                 {
-                    if (_imeWin != null)
-                    {
-                        _imeWin.Dispose();
-                    }
-
                     SetCurrentValue(IsBrowserInitializedProperty, true);
 
                     // If Address was previously set, only now can we actually do the load
@@ -1470,81 +1484,6 @@ namespace CefSharp.Wpf
         #endregion WebBrowser dependency property
 
         /// <summary>
-        /// WindowProc callback interceptor. Handles Windows messages intended for the source hWnd, and passes them to the
-        /// contained browser as needed.
-        /// </summary>
-        /// <param name="hWnd">The source handle.</param>
-        /// <param name="message">The message.</param>
-        /// <param name="wParam">Additional message info.</param>
-        /// <param name="lParam">Even more message info.</param>
-        /// <param name="handled">if set to <c>true</c>, the event has already been handled by someone else.</param>
-        /// <returns>IntPtr.</returns>
-        protected virtual IntPtr SourceHook(IntPtr hWnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
-        {
-            if (handled)
-            {
-                return IntPtr.Zero;
-            }
-
-            const int WM_EXITSIZEMOVE = 0x0232;
-            const int WM_SIZE = 0x0005;
-            const int WM_APP = 0x8000;
-
-            const int SIZE_MAXIMIZED = 2;
-            const int SIZE_RESTORED = 0;
-
-            bool moveIMEWindow = false;
-
-            if (message == WM_EXITSIZEMOVE)
-            {
-                moveIMEWindow = true;
-            }
-            else if (message == WM_SIZE)
-            {
-                if (wParam.ToInt32() == SIZE_MAXIMIZED)
-                {
-                    _wasMaximized = true;
-
-                    moveIMEWindow = true;
-                }
-                else if (_wasMaximized)
-                {
-                    _wasMaximized = false;
-
-                    if (wParam.ToInt32() == SIZE_RESTORED)
-                    {
-                        moveIMEWindow = true;
-                    }
-                }
-            }
-
-            if (moveIMEWindow)
-            {
-                if (_imeWin != null)
-                {
-                    _imeWin.PostWM_APP();
-                }
-            }
-            else if (message == WM_APP)
-            {
-                MoveIMEWindow();
-            }
-
-            if (!IsDisposed && _imeWin != null && IsKeyboardFocused && browser != null)
-            {
-                var ret = _imeWin.WndProcHandler(hWnd, message, wParam, lParam);
-                if (ret == IntPtr.Zero)
-                {
-                    handled = true;
-                }
-
-                return ret;
-            }
-
-            return IntPtr.Zero;
-        }
-
-        /// <summary>
         /// Handles the <see cref="E:Drop" /> event.
         /// </summary>
         /// <param name="sender">The sender.</param>
@@ -1680,9 +1619,6 @@ namespace CefSharp.Wpf
 
                 DpiScaleFactor = source.CompositionTarget.TransformToDevice.M11;
 
-                sourceHook = SourceHook;
-                source.AddHook(sourceHook);
-
                 WpfKeyboardHandler.Setup(source);
 
                 if (notifyDpiChanged && browser != null)
@@ -1715,17 +1651,12 @@ namespace CefSharp.Wpf
                 }
 
                 browserScreenLocation = GetBrowserScreenLocation();
+
+                monitorInfo.Init();
+                MonitorInfo.GetMonitorInfoForWindowHandle(source.Handle, ref monitorInfo);
             }
             else if (args.OldSource != null)
             {
-                RemoveSourceHook();
-
-                if (_imeWin != null)
-                {
-                    _imeWin.Dispose();
-                    _imeWin = null;
-                }
-
                 WpfKeyboardHandler.Dispose();
 
                 var window = args.OldSource.RootVisual as Window;
@@ -1746,21 +1677,21 @@ namespace CefSharp.Wpf
             {
                 case WindowState.Normal:
                 case WindowState.Maximized:
-                {
-                    if (browser != null)
                     {
-                        browser.GetHost().WasHidden(false);
+                        if (browser != null)
+                        {
+                            browser.GetHost().WasHidden(false);
+                        }
+                        break;
                     }
-                    break;
-                }
                 case WindowState.Minimized:
-                {
-                    if (browser != null)
                     {
-                        browser.GetHost().WasHidden(true);
+                        if (browser != null)
+                        {
+                            browser.GetHost().WasHidden(true);
+                        }
+                        break;
                     }
-                    break;
-                }
             }
         }
 
@@ -1788,18 +1719,6 @@ namespace CefSharp.Wpf
             //We maintain a manual reference to the controls screen location
             //(relative to top/left of the screen)
             browserScreenLocation = GetBrowserScreenLocation();
-        }
-
-        /// <summary>
-        /// Removes the source hook.
-        /// </summary>
-        private void RemoveSourceHook()
-        {
-            if (source != null && sourceHook != null)
-            {
-                source.RemoveHook(sourceHook);
-                source = null;
-            }
         }
 
         /// <summary>
@@ -1877,11 +1796,6 @@ namespace CefSharp.Wpf
             if (browser != null)
             {
                 browser.GetHost().WasResized();
-
-                if (_imeWin != null)
-                {
-                    _imeWin.HideWindow();
-                }
             }
         }
 
@@ -2093,82 +2007,8 @@ namespace CefSharp.Wpf
             }
         }
 
-
         /// <summary>
-        /// Caculate position of IME window via JavaScript.
-        protected void MoveIMEWindow(bool adjustPosition = false)
-        {
-            if (_imeWin != null && browser != null)
-            {
-                var browserWrapper = browser as CefSharpBrowserWrapper;
-                var frame = browserWrapper.MainFrame;
-
-                var task = frame.EvaluateScriptAsync(script, null);
-                task.ContinueWith(t =>
-                {
-                    if (!t.IsFaulted)
-                    {
-                        var response = t.Result;
-                        var EvaluateJavaScriptResult = response.Success ? (response.Result ?? "null") : response.Message;
-
-                        string result = EvaluateJavaScriptResult.ToString();
-                        string[] xy = result.Split(',');
-
-                        int x = 0;
-                        Int32.TryParse(xy[0], out x);
-
-                        int y = 0;
-                        Int32.TryParse(xy[1], out y);
-
-                        if (_imeWin != null)
-                        {
-                            _imeWin.MoveWindow(x, y);
-
-                            if (adjustPosition)
-                            {
-//                                _imeWin.AdjustWindowPosition();
-                            }
-                        }
-                    }
-                }, TaskScheduler.FromCurrentSynchronizationContext());
-            }
-        }
-
-        protected override void OnGotFocus(RoutedEventArgs e)
-        {
-            base.OnGotFocus(e);
-
-            InputMethod.SetIsInputMethodEnabled(this, true);
-            InputMethod.SetIsInputMethodSuspended(this, true);
-
-            if (_imeWin == null && browser != null && source != null)
-            {
-                _imeWin = new OsrImeWin(source.Handle, browser);
-
-                // Somehow after page is loaded and when switching to IME via TaskBar icon and typing, IME window doesn't appear. As a workaround call 'KillSetFocusAsync'.
-                KillSetFocusAsync();
-
-                MoveIMEWindow();
-            }
-        }
-
-        protected override void OnLostFocus(RoutedEventArgs e)
-        {
-            base.OnLostFocus(e);
-
-            InputMethod.SetIsInputMethodEnabled(this, false);
-            InputMethod.SetIsInputMethodSuspended(this, false);
-
-            if (_imeWin != null)
-            {
-                _imeWin.Dispose();
-                _imeWin = null;
-            }
-        }
-
-
-        /// <summary>
-        /// Invoked when an unhandled <see cref="E:System.Windows.Input.Keyboard.PreviewKeyDown" /> attached event reaches an
+        /// Invoked when an unhandled <see cref="E:System.Windows.Input.Keyboard.PreviewKeyDown" /> attached event reaches an
         /// element in its route that is derived from this class. Implement this method to add class handling for this event.
         /// </summary>
         /// <param name="e">The <see cref="T:System.Windows.Input.KeyEventArgs" /> that contains the event data.</param>
@@ -2183,7 +2023,7 @@ namespace CefSharp.Wpf
         }
 
         /// <summary>
-        /// Invoked when an unhandled <see cref="E:System.Windows.Input.Keyboard.PreviewKeyUp" /> attached event reaches an
+        /// Invoked when an unhandled <see cref="E:System.Windows.Input.Keyboard.PreviewKeyUp" /> attached event reaches an
         /// element in its route that is derived from this class. Implement this method to add class handling for this event.
         /// </summary>
         /// <param name="e">The <see cref="T:System.Windows.Input.KeyEventArgs" /> that contains the event data.</param>
@@ -2212,7 +2052,7 @@ namespace CefSharp.Wpf
         }
 
         /// <summary>
-        /// Invoked when an unhandled <see cref="E:System.Windows.Input.Mouse.MouseMove" /> attached event reaches an element in its route that is derived from this class. Implement this method to add class handling for this event.
+        /// Invoked when an unhandled <see cref="E:System.Windows.Input.Mouse.MouseMove" /> attached event reaches an element in its route that is derived from this class. Implement this method to add class handling for this event.
         /// </summary>
         /// <param name="e">The <see cref="T:System.Windows.Input.MouseEventArgs" /> that contains the event data.</param>
         protected override void OnMouseMove(MouseEventArgs e)
@@ -2229,7 +2069,7 @@ namespace CefSharp.Wpf
         }
 
         /// <summary>
-        /// Invoked when an unhandled <see cref="E:System.Windows.Input.Mouse.MouseWheel" /> attached event reaches an element in its route that is derived from this class. Implement this method to add class handling for this event.
+        /// Invoked when an unhandled <see cref="E:System.Windows.Input.Mouse.MouseWheel" /> attached event reaches an element in its route that is derived from this class. Implement this method to add class handling for this event.
         /// </summary>
         /// <param name="e">The <see cref="T:System.Windows.Input.MouseWheelEventArgs" /> that contains the event data.</param>
         protected override void OnMouseWheel(MouseWheelEventArgs e)
@@ -2253,37 +2093,10 @@ namespace CefSharp.Wpf
             }
 
             base.OnMouseWheel(e);
-
-            if (_imeWin != null)
-            {
-                _imeWin.HideWindow();
-            }
-        }
-
-
-        /// <summary>
-        /// Function is used to hide IME window indirectly by KillFocus and SetFocus(source.Handle) (asynchronously via JavaScript).
-        /// It is used as workarounds in 'OnGotFocus' and in 'OnMouseDown'.
-        protected void KillSetFocusAsync()
-        {
-            if (browser != null)
-            {
-                OsrImeWin.KillFocus();
-
-                var browserWrapper = browser as CefSharpBrowserWrapper;
-                var frame = browserWrapper.MainFrame;
-
-                var task = frame.EvaluateScriptAsync("", null);
-                task.ContinueWith(t =>
-                {
-                    OsrImeWin.SetFocus(source.Handle);
-
-                }, TaskScheduler.FromCurrentSynchronizationContext());
-            }
         }
 
         /// <summary>
-        /// Invoked when an unhandled <see cref="E:System.Windows.Input.Mouse.MouseDown" /> attached event reaches an
+        /// Invoked when an unhandled <see cref="E:System.Windows.Input.Mouse.MouseDown" /> attached event reaches an
         /// element in its route that is derived from this class. Implement this method to add class handling for this event.
         /// </summary>
         /// <param name="e">The <see cref="T:System.Windows.Input.MouseButtonEventArgs" /> that contains the event data.
@@ -2295,14 +2108,13 @@ namespace CefSharp.Wpf
 
             base.OnMouseDown(e);
 
-            // When user clicks on a textbox which has focus, IME window hides, but somehow last entered characters are duplicated, KillSetFocusAsync is used workaround.
-            KillSetFocusAsync();
-
-            MoveIMEWindow();
+            // Closes IME candidate window.
+            NativeIME.SetFocus(IntPtr.Zero);
+            NativeIME.SetFocus(source.Handle);
         }
 
         /// <summary>
-        /// Invoked when an unhandled <see cref="E:System.Windows.Input.Mouse.MouseUp" /> routed event reaches an element in its route that is derived from this class. Implement this method to add class handling for this event.
+        /// Invoked when an unhandled <see cref="E:System.Windows.Input.Mouse.MouseUp" /> routed event reaches an element in its route that is derived from this class. Implement this method to add class handling for this event.
         /// </summary>
         /// <param name="e">The <see cref="T:System.Windows.Input.MouseButtonEventArgs" /> that contains the event data. The event data reports that the mouse button was released.</param>
         protected override void OnMouseUp(MouseButtonEventArgs e)
@@ -2313,7 +2125,7 @@ namespace CefSharp.Wpf
         }
 
         /// <summary>
-        /// Invoked when an unhandled <see cref="E:System.Windows.Input.Mouse.MouseLeave" /> attached event is raised on this element. Implement this method to add class handling for this event.
+        /// Invoked when an unhandled <see cref="E:System.Windows.Input.Mouse.MouseLeave" /> attached event is raised on this element. Implement this method to add class handling for this event.
         /// </summary>
         /// <param name="e">The <see cref="T:System.Windows.Input.MouseEventArgs" /> that contains the event data.</param>
         protected override void OnMouseLeave(MouseEventArgs e)
