@@ -2,31 +2,31 @@
 //
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 
+using Microsoft.Win32.SafeHandles;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Interop;
-using System.Windows.Threading;
-using System.Windows.Data;
 using System.Windows.Media;
-using System.Collections.Generic;
-using System.Linq;
+using System.Windows.Threading;
+using Point = System.Windows.Point;
+using Size = System.Windows.Size;
 using CefSharp.Enums;
 using CefSharp.Internals;
 using CefSharp.Structs;
 using CefSharp.Wpf.Internals;
 using CefSharp.Wpf.Rendering;
 using CefSharp.Wpf.IME;
-using Microsoft.Win32.SafeHandles;
 using CursorType = CefSharp.Enums.CursorType;
-using Point = System.Windows.Point;
 using Rect = CefSharp.Structs.Rect;
-using Size = System.Windows.Size;
 
 namespace CefSharp.Wpf
 {
@@ -627,7 +627,6 @@ namespace CefSharp.Wpf
                 Cef.RemoveDisposable(this);
 
                 WpfKeyboardHandler.Dispose();
-
                 source = null;
             }
         }
@@ -887,7 +886,7 @@ namespace CefSharp.Wpf
 
                     if (parentWindow != null)
                     {
-                        var point = TransformToAncestor(parentWindow).Transform(new System.Windows.Point(0, 0));
+                        var point = TransformToAncestor(parentWindow).Transform(new Point(0, 0));
 
                         var rects = new List<Structs.Rect>();
 
@@ -1677,21 +1676,21 @@ namespace CefSharp.Wpf
             {
                 case WindowState.Normal:
                 case WindowState.Maximized:
+                {
+                    if (browser != null)
                     {
-                        if (browser != null)
-                        {
-                            browser.GetHost().WasHidden(false);
-                        }
-                        break;
+                        browser.GetHost().WasHidden(false);
                     }
+                    break;
+                }
                 case WindowState.Minimized:
+                {
+                    if (browser != null)
                     {
-                        if (browser != null)
-                        {
-                            browser.GetHost().WasHidden(true);
-                        }
-                        break;
+                        browser.GetHost().WasHidden(true);
                     }
+                    break;
+                }
             }
         }
 

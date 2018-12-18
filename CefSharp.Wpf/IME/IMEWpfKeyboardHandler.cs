@@ -16,7 +16,6 @@ namespace CefSharp.Wpf.IME
         bool _isDisposed = false;
         List<Rect> _compositionBounds = new List<Rect>();
         HwndSource _source;
-        Func<IntPtr, int> _loWord;
 
         internal bool IsActive { get; set; }
 
@@ -27,10 +26,6 @@ namespace CefSharp.Wpf.IME
 
         public IMEWpfKeyboardHandler(ChromiumWebBrowser owner) : base(owner)
         {
-            if (IntPtr.Size == sizeof(Int32))
-                _loWord = x => x.ToInt32();
-            else
-                _loWord = LOWORD64;
         }
 
         private void Owner_LostFocus(object sender, System.Windows.RoutedEventArgs e)
@@ -97,7 +92,7 @@ namespace CefSharp.Wpf.IME
                     break;
 
                 case NativeIME.WM_IME_COMPOSITION:
-                    OnIMEComposition(hwnd, _loWord(lParam));
+                    OnIMEComposition(hwnd, lParam.ToInt32());
                     handled = true;
                     break;
 
@@ -159,8 +154,7 @@ namespace CefSharp.Wpf.IME
             // We handle the IME Composition Window ourselves (but let the IME Candidates
             // Window be handled by IME through DefWindowProc()), so clear the
             // ISC_SHOWUICOMPOSITIONWINDOW flag:
-            lParam = (IntPtr)(lParam.ToInt64() & ~NativeIME.ISC_SHOWUICOMPOSITIONWINDOW);
-            NativeIME.DefWindowProc(hwnd, msg, wParam, lParam);
+            NativeIME.DefWindowProc(hwnd, msg, wParam, (IntPtr)(lParam.ToInt64() & ~NativeIME.ISC_SHOWUICOMPOSITIONWINDOW));
             // TODO: should we call ImmNotifyIME?
 
             CreateImeWindow(hwnd);
@@ -215,9 +209,6 @@ namespace CefSharp.Wpf.IME
             IntPtr hIMC = NativeIME.ImmGetContext(hwnd);
 
             Rect rc = _compositionBounds[0];
-
-            NativeIME.RECT rect;
-            NativeIME.GetWindowRect(hwnd, out rect);
 
             int x = rc.X + rc.Width;
             int y = rc.Y + rc.Height;
@@ -288,18 +279,6 @@ namespace CefSharp.Wpf.IME
         private void UpdateCaretPosition(int index)
         {
             MoveImeWindow(_source.Handle);
-        }
-
-        [SuppressMessage("Microsoft.Performance", "CA1811:AvoidUncalledPrivateCode")]
-        private static Int32 HIWORD64(IntPtr ptr)
-        {
-            return (Int32)((ptr.ToInt64() >> 16) & 0xFFFFFFFF);
-        }
-
-        [SuppressMessage("Microsoft.Performance", "CA1811:AvoidUncalledPrivateCode")]
-        private static Int32 LOWORD64(IntPtr ptr)
-        {
-            return (Int32)(ptr.ToInt64() & 0xFFFFFFFF);
         }
     }
 }

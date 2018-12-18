@@ -53,40 +53,6 @@ namespace CefSharp.Wpf.IME
         internal const uint LANG_CHINESE = 0x04;
         internal const uint LANG_KOREAN = 0x12;
 
-
-        [StructLayout(LayoutKind.Sequential)]
-        internal struct TagPoint
-        {
-            public int X;
-            public int Y;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        internal struct TagRect
-        {
-            public int Left;
-            public int Top;
-            public int Right;
-            public int Bottom;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        internal struct TagCompositionForm
-        {
-            public uint DwStyle;
-            public TagPoint PtCurrentPos;
-            public TagRect RcArea;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        internal struct TagCandidateForm
-        {
-            public uint DwIndex;
-            public uint DwStyle;
-            public TagPoint PtCurrentPos;
-            public TagRect RcArea;
-        }
-
         [StructLayout(LayoutKind.Sequential)]
         public struct POINT
         {
@@ -115,6 +81,14 @@ namespace CefSharp.Wpf.IME
         }
 
         [StructLayout(LayoutKind.Sequential)]
+        public struct COMPOSITIONFORM
+        {
+            public int dwStyle;
+            public POINT ptCurrentPos;
+            public RECT rcArea;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
         public struct CANDIDATEFORM
         {
             public int dwIndex;
@@ -123,46 +97,30 @@ namespace CefSharp.Wpf.IME
             public RECT rcArea;
         }
 
-        [SecurityCritical]
-        [SuppressUnmanagedCodeSecurity]
         [DllImport("imm32.dll")]
         internal static extern IntPtr ImmCreateContext();
 
-        [SecurityCritical]
-        [SuppressUnmanagedCodeSecurity]
         [DllImport("imm32.dll")]
         internal static extern IntPtr ImmAssociateContext(IntPtr hWnd, IntPtr hIMC);
 
         [DllImport("imm32.dll")]
         internal static extern bool ImmDestroyContext(IntPtr hIMC);
 
-        [SecurityCritical]
-        [SuppressUnmanagedCodeSecurity]
         [DllImport("imm32.dll")]
         internal static extern IntPtr ImmGetContext(IntPtr hWnd);
 
-        [SecurityCritical]
-        [SuppressUnmanagedCodeSecurity]
         [DllImport("Imm32.dll")]
         internal static extern bool ImmReleaseContext(IntPtr hWnd, IntPtr hIMC);
 
-        [SecurityCritical]
-        [SuppressUnmanagedCodeSecurity]
         [DllImport("Imm32.dll")]
         internal static extern bool ImmNotifyIME(IntPtr hIMC, uint action, uint index, uint value);
 
-        [SecurityCritical]
-        [SuppressUnmanagedCodeSecurity]
         [DllImport("imm32.dll", CharSet = CharSet.Unicode)]
         internal static extern uint ImmGetCompositionString(IntPtr hIMC, uint dwIndex, byte[] lpBuf, uint dwBufLen);
 
-        [SecurityCritical]
-        [SuppressUnmanagedCodeSecurity]
         [DllImport("imm32.dll")]
-        internal static extern int ImmSetCompositionWindow(IntPtr hIMC, ref TagCompositionForm lpCompForm);
+        internal static extern int ImmSetCompositionWindow(IntPtr hIMC, ref COMPOSITIONFORM lpCompForm);
 
-        [SecurityCritical]
-        [SuppressUnmanagedCodeSecurity]
         [DllImport("imm32.dll")]
         public static extern int ImmSetCandidateWindow(IntPtr hIMC, [MarshalAs(UnmanagedType.Struct)] ref CANDIDATEFORM lpCandidateForm);
 
@@ -189,11 +147,5 @@ namespace CefSharp.Wpf.IME
 
         [DllImport("user32.dll")]
         internal static extern IntPtr SetFocus(IntPtr hWnd);
-
-        [DllImport("user32.dll")]
-        internal static extern bool GetWindowRect(IntPtr hwnd, out RECT lpRect);
-
-        [DllImport("user32.dll")]
-        internal static extern IntPtr WindowFromPoint(POINT pnt);
     }
 }
