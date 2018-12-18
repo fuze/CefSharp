@@ -63,9 +63,9 @@ namespace CefSharp.Wpf.IME
 
             bool ret = GetString(hIMC, lParam, GCS_COMPSTR, out text);
             if (ret)
-			{
+            {
                 GetCompositionInfo(lParam, text, underlines, ref compositionStart);
-			}
+            }
 
             ImmReleaseContext(_hWnd, hIMC);
 
