@@ -13,7 +13,7 @@ namespace CefSharp.Wpf.IME
     {
         int _languageCodeId;
         bool _systemCaret;
-        bool _isDisposed = false;
+        bool _isDisposed;
         List<Rect> _compositionBounds = new List<Rect>();
         HwndSource _source;
 
