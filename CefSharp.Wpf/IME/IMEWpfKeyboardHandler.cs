@@ -11,11 +11,11 @@ namespace CefSharp.Wpf.IME
 {
     public class IMEWpfKeyboardHandler : WpfKeyboardHandler
     {
-        int _languageCodeId;
-        bool _systemCaret;
-        bool _isDisposed;
-        List<Rect> _compositionBounds = new List<Rect>();
-        HwndSource _source;
+        int languageCodeId;
+        bool systemCaret;
+        bool isDisposed;
+        List<Rect> compositionBounds = new List<Rect>();
+        HwndSource source;
 
         internal bool IsActive { get; set; }
 
@@ -44,7 +44,7 @@ namespace CefSharp.Wpf.IME
 
         public override void Setup(HwndSource source)
         {
-            _source = source;
+            this.source = source;
             sourceHook = SourceHook;
             source.AddHook(SourceHook);
 
@@ -57,18 +57,18 @@ namespace CefSharp.Wpf.IME
 
         public override void Dispose()
         {
-            if (_isDisposed)
+            if (isDisposed)
                 return;
 
-            _isDisposed = true;
+            isDisposed = true;
 
             owner.GotFocus -= Owner_GotFocus;
             owner.LostFocus -= Owner_LostFocus;
 
-            if (_source != null && sourceHook != null)
+            if (source != null && sourceHook != null)
             {
-                _source.RemoveHook(sourceHook);
-                _source = null;
+                source.RemoveHook(sourceHook);
+                source = null;
             }
         }
 
@@ -76,7 +76,7 @@ namespace CefSharp.Wpf.IME
         {
             handled = false;
 
-            if (owner == null || owner.GetBrowserHost() == null || owner.IsDisposed || !IsActive || _isDisposed)
+            if (owner == null || owner.GetBrowserHost() == null || owner.IsDisposed || !IsActive || isDisposed)
                 return IntPtr.Zero;
 
             switch (msg)
@@ -181,15 +181,15 @@ namespace CefSharp.Wpf.IME
             // it during this input context.
             // Since some third-party Japanese IME also uses ::GetCaretPos() to determine
             // their window position, we also create a caret for Japanese IMEs.
-            _languageCodeId = PrimaryLangId(InputLanguageManager.Current.CurrentInputLanguage.KeyboardLayoutId);
+            languageCodeId = PrimaryLangId(InputLanguageManager.Current.CurrentInputLanguage.KeyboardLayoutId);
 
-            if (_languageCodeId == NativeIME.LANG_JAPANESE || _languageCodeId == NativeIME.LANG_CHINESE)
+            if (languageCodeId == NativeIME.LANG_JAPANESE || languageCodeId == NativeIME.LANG_CHINESE)
             {
-                if (!_systemCaret)
+                if (!systemCaret)
                 {
                     if (NativeIME.CreateCaret(hwnd, IntPtr.Zero, 1, 1))
                     {
-                        _systemCaret = true;
+                        systemCaret = true;
                     }
                 }
             }
@@ -203,12 +203,12 @@ namespace CefSharp.Wpf.IME
 
         private void MoveImeWindow(IntPtr hwnd)
         {
-            if (0 == _compositionBounds.Count)
+            if (0 == compositionBounds.Count)
                 return;
 
             IntPtr hIMC = NativeIME.ImmGetContext(hwnd);
 
-            Rect rc = _compositionBounds[0];
+            Rect rc = compositionBounds[0];
 
             int x = rc.X + rc.Width;
             int y = rc.Y + rc.Height;
@@ -232,12 +232,12 @@ namespace CefSharp.Wpf.IME
             };
             NativeIME.ImmSetCandidateWindow(hIMC, ref candidatePosition);
 
-            if (_systemCaret)
+            if (systemCaret)
             {
                 NativeIME.SetCaretPos(x, y);
             }
 
-            if (_languageCodeId == NativeIME.LANG_KOREAN)
+            if (languageCodeId == NativeIME.LANG_KOREAN)
             {
                 // Chinese IMEs and Japanese IMEs require the upper-left corner of
                 // the caret to move the position of their candidate windows.
@@ -263,22 +263,22 @@ namespace CefSharp.Wpf.IME
 
         private void DestroyImeWindow(IntPtr hwnd)
         {
-            if (_systemCaret)
+            if (systemCaret)
             {
                 NativeIME.DestroyCaret();
-                _systemCaret = false;
+                systemCaret = false;
             }
         }
 
         internal void ChangeCompositionRange(Range selectionRange, List<Rect> bounds)
         {
-            _compositionBounds = bounds;
-            MoveImeWindow(_source.Handle);
+            compositionBounds = bounds;
+            MoveImeWindow(source.Handle);
         }
 
         private void UpdateCaretPosition(int index)
         {
-            MoveImeWindow(_source.Handle);
+            MoveImeWindow(source.Handle);
         }
     }
 }

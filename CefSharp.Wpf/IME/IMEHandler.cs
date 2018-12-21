@@ -11,7 +11,7 @@ namespace CefSharp.Wpf.IME
         internal const uint ColorUNDERLINE = 0xFFFFFFFF;   // Black SkColor value for underline,
         internal const uint ColorBKCOLOR = 0xFF000000;    // White SkColor value for background,
 
-        IntPtr _hWnd;
+        IntPtr hWnd;
 
         internal static IMEHandler Create(IntPtr hWnd)
         {
@@ -20,7 +20,7 @@ namespace CefSharp.Wpf.IME
 
         private IMEHandler(IntPtr hWnd)
         {
-            _hWnd = hWnd;
+            this.hWnd = hWnd;
         }
 
         public void Dispose()
@@ -48,18 +48,18 @@ namespace CefSharp.Wpf.IME
 
         internal bool GetResult(uint lParam, out string text)
         {
-            IntPtr hIMC = ImmGetContext(_hWnd);
+            IntPtr hIMC = ImmGetContext(hWnd);
 
             var ret = GetString(hIMC, lParam, GCS_RESULTSTR, out text);
 
-            ImmReleaseContext(_hWnd, hIMC);
+            ImmReleaseContext(hWnd, hIMC);
 
             return ret;
         }
 
         internal bool GetComposition(uint lParam, List<CompositionUnderline> underlines, ref int compositionStart, out string text)
         {
-            IntPtr hIMC = ImmGetContext(_hWnd);
+            IntPtr hIMC = ImmGetContext(hWnd);
 
             bool ret = GetString(hIMC, lParam, GCS_COMPSTR, out text);
             if (ret)
@@ -67,14 +67,14 @@ namespace CefSharp.Wpf.IME
                 GetCompositionInfo(lParam, text, underlines, ref compositionStart);
             }
 
-            ImmReleaseContext(_hWnd, hIMC);
+            ImmReleaseContext(hWnd, hIMC);
 
             return ret;
         }
 
         private void GetCompositionInfo(uint lParam, string text, List<CompositionUnderline> underlines, ref int compositionStart)
         {
-            IntPtr hIMC = ImmGetContext(_hWnd);
+            IntPtr hIMC = ImmGetContext(hWnd);
 
             underlines.Clear();
 
@@ -131,7 +131,7 @@ namespace CefSharp.Wpf.IME
                 underlines.Add(new CompositionUnderline(range, ColorUNDERLINE, ColorBKCOLOR, thick));
             }
 
-            ImmReleaseContext(_hWnd, hIMC);
+            ImmReleaseContext(hWnd, hIMC);
         }
 
         private void GetCompositionUnderlines(IntPtr hIMC, int targetStart, int targetEnd, List<CompositionUnderline> underlines)
