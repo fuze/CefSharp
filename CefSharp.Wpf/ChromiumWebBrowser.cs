@@ -500,7 +500,7 @@ namespace CefSharp.Wpf
             BrowserSettings = new BrowserSettings();
             RenderHandler = new InteropBitmapRenderHandler();
 
-            WpfKeyboardHandler = new IMEWpfKeyboardHandler(this);
+            WpfKeyboardHandler = new WpfKeyboardHandler(this);
 
             PresentationSource.AddSourceChangedHandler(this, PresentationSourceChangedHandler);
 
@@ -873,7 +873,7 @@ namespace CefSharp.Wpf
                 return current as Window;
             }
 
-            var imeKeyboardHandler = WpfKeyboardHandler as IMEWpfKeyboardHandler;
+            var imeKeyboardHandler = WpfKeyboardHandler as WpfKeyboardHandler;
             if (imeKeyboardHandler.IsActive)
             {
                 var screenInfo = GetScreenInfo();
